@@ -2,47 +2,50 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "core/telemetry.h"
+#include <stddef.h>
 
-// WiFi configuration
+/*
+ * NOTE: we deliberately avoid the name wifi_config_t because ESP-IDF
+ * already defines that type in esp_wifi_types.h.
+ */
 typedef struct {
-    char ssid[32];
-    char password[64];
-    char influxdb_url[128];
-    char influxdb_db[32];
+    char     ssid[32];
+    char     password[64];
+    char     influxdb_url[128];
+    char     influxdb_db[32];
     uint16_t influxdb_port;
-    char influxdb_user[32];
-    char influxdb_password[64];
+    char     influxdb_user[32];
+    char     influxdb_password[64];
 } velo_wifi_config_t;
 
-// Initialize network system
+/* Initialise TCP/IP stack and WiFi driver (does not connect yet) */
 void network_init(void);
 
-// Connect to WiFi
-bool network_connect_wifi(const char* ssid, const char* password);
+/* Connect to the given SSID; blocks up to ~10 s. Returns true on success. */
+bool network_connect_wifi(const char *ssid, const char *password);
 
-// Disconnect from WiFi
+/* Disconnect and stop WiFi */
 void network_disconnect_wifi(void);
 
-// Check WiFi connection status
+/* True when an IP address has been obtained */
 bool network_is_connected(void);
 
-// Upload telemetry data to InfluxDB
-bool network_upload_telemetry(const char* ride_id, const char* telemetry_data, size_t data_length);
+/* POST telemetry_data (line-protocol) to the configured InfluxDB */
+bool network_upload_telemetry(const char *ride_id,
+                              const char *telemetry_data,
+                              size_t data_length);
 
-// Upload ride file to InfluxDB
-bool network_upload_ride_file(const char* ride_id);
+/* Read telemetry.lp from SD and upload it (used after a ride) */
+bool network_upload_ride_file(const char *ride_id);
 
-// Configure InfluxDB settings
-void network_configure_influxdb(const char* url, uint16_t port,
-                                const char* db, const char* user, const char* password);
+/* Upload a GPX file from SD to InfluxDB-adjacent storage (stub) */
+bool network_upload_gpx_file(const char *ride_id);
 
-// Save WiFi configuration
-bool network_save_wifi_config(const wifi_config_t* config);
+/* Override InfluxDB connection parameters and persist them */
+void network_configure_influxdb(const char *url, uint16_t port,
+                                const char *db,
+                                const char *user, const char *password);
 
-// Load WiFi configuration
-bool network_load_wifi_config(wifi_config_t* config);
-
-// Update all function signatures to use velo_wifi_config_t*
-bool network_save_wifi_config(const velo_wifi_config_t* config);
-bool network_load_wifi_config(velo_wifi_config_t* config);
+/* Persist / restore velo_wifi_config_t to/from NVS */
+bool network_save_config(const velo_wifi_config_t *config);
+bool network_load_config(velo_wifi_config_t *config);
