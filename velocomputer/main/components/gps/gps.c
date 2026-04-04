@@ -2,57 +2,84 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
+#include <string.h>   /* memcpy */
+#include <sys/time.h>
 
 static const char *TAG = "gps";
 
-// This is a stub implementation
-// In a real implementation, you would interface with a GPS module
-// like UBlox, MTK, etc. over UART
+/*
+ * Stub implementation.
+ * Replace the body of gps_start() with real UART / NMEA parsing
+ * for your GPS module (UBlox, MTK, Quectel, …).
+ */
 
-static gps_data_t current_gps_data = {0};
-static bool gps_active = false;
+static gps_data_t s_current = {0};
+static bool       s_active  = false;
 
-void gps_init(void) {
-    ESP_LOGI(TAG, "Initializing GPS module (stub)");
-    // Initialize UART, configure GPS module, etc.
-    // For now, we'll just set some dummy data
-    current_gps_data.latitude = 0.0;
-    current_gps_data.longitude = 0.0;
-    current_gps_data.valid = false;
+/* ------------------------------------------------------------------ */
+void gps_init(void)
+{
+    ESP_LOGI(TAG, "Initialising GPS (stub)");
+    memset(&s_current, 0, sizeof(s_current));
+    s_current.valid = false;
+    /*
+     * TODO: configure UART, set baud rate, send module init commands.
+     * Example for UBlox on UART1:
+     *   uart_config_t uart_cfg = { .baud_rate = 9600, ... };
+     *   uart_param_config(UART_NUM_1, &uart_cfg);
+     *   uart_set_pin(UART_NUM_1, TX_PIN, RX_PIN, -1, -1);
+     *   uart_driver_install(UART_NUM_1, 1024, 0, 0, NULL, 0);
+     */
 }
 
-bool gps_get_data(gps_data_t* data) {
-    if (!data || !gps_active) return false;
+/* ------------------------------------------------------------------ */
+bool gps_get_data(gps_data_t *data)
+{
+    if (!data || !s_active) return false;
 
-    // In real implementation, read from GPS module
-    // For stub, return current data
-    memcpy(data, &current_gps_data, sizeof(gps_data_t));
-    return data->valid;
+    /* Attach a fresh nanosecond timestamp to whichever fix we have */
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    s_current.timestamp = (uint64_t)tv.tv_sec * 1000000000ULL
+                        + (uint64_t)tv.tv_usec * 1000ULL;
+
+    memcpy(data, &s_current, sizeof(gps_data_t));
+    return s_current.valid;
 }
 
-void gps_start(void) {
-    if (gps_active) return;
+/* ------------------------------------------------------------------ */
+void gps_start(void)
+{
+    if (s_active) return;
 
     ESP_LOGI(TAG, "Starting GPS acquisition");
-    gps_active = true;
+    s_active = true;
 
-    // In real implementation, start GPS module
-    // For stub, simulate getting a fix after 5 seconds
+    /*
+     * TODO: replace the simulated fix below with a real NMEA read loop.
+     *
+     * Stub: pretend we get a fix after 5 s (Ottawa, ON).
+     */
     vTaskDelay(pdMS_TO_TICKS(5000));
-    current_gps_data.latitude = 40.7128;  // New York
-    current_gps_data.longitude = -74.0060;
-    current_gps_data.altitude = 10.0;
-    current_gps_data.satellites = 8;
-    current_gps_data.valid = true;
-    current_gps_data.speed = 0.0;
-    current_gps_data.heading = 0.0;
+
+    s_current.latitude   = 45.4215;
+    s_current.longitude  = -75.6972;
+    s_current.altitude   = 70.0f;
+    s_current.speed      = 0.0f;
+    s_current.heading    = 0.0f;
+    s_current.satellites = 8;
+    s_current.valid      = true;
+
+    ESP_LOGI(TAG, "GPS fix acquired (stub)");
 }
 
-void gps_stop(void) {
-    if (!gps_active) return;
+/* ------------------------------------------------------------------ */
+void gps_stop(void)
+{
+    if (!s_active) return;
 
-    ESP_LOGI(TAG, "Stopping GPS module");
-    gps_active = false;
-    // In real implementation, put GPS to sleep
+    ESP_LOGI(TAG, "Stopping GPS");
+    s_active        = false;
+    s_current.valid = false;
+    /* TODO: send sleep command to GPS module */
 }
