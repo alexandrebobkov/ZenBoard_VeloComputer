@@ -1,290 +1,314 @@
 #include "storage.h"
+#include "telemetry.h"
 #include "esp_log.h"
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
-#include "driver/sdmmc_host.h"
 #include "driver/sdspi_host.h"
-#include "sdmmc_defs.h"
+#include "driver/spi_master.h"
+#include "driver/sdmmc_host.h"
 #include "cJSON.h"
 #include <sys/stat.h>
 #include <sys/unistd.h>
 #include <dirent.h>
 #include <time.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 static const char *TAG = "storage";
-static bool sd_card_mounted = false;
-static char current_ride_path[64] = "/sdcard/rides/current";
-static FILE* current_telemetry_file = NULL;
 
-static void mount_sd_card() {
-    if (sd_card_mounted) return;
+/* ---------- SD SPI pin mapping ------------------------------------ */
+#define SD_MISO  GPIO_NUM_2
+#define SD_MOSI  GPIO_NUM_15
+#define SD_CLK   GPIO_NUM_14
+#define SD_CS    GPIO_NUM_13
+#define SD_HOST  SPI2_HOST          /* HSPI */
 
-    ESP_LOGI(TAG, "Initializing SD card");
+/* ---------- State ------------------------------------------------- */
+static bool   s_mounted            = false;
+static char   s_ride_path[80]      = {0};
+static FILE  *s_telemetry_file     = NULL;
 
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
-    slot_config.gpio_miso = GPIO_NUM_2;
-    slot_config.gpio_mosi = GPIO_NUM_15;
-    slot_config.gpio_sck = GPIO_NUM_14;
-    slot_config.gpio_cs = GPIO_NUM_13;
+/* ------------------------------------------------------------------ */
+static void mount_sd_card(void)
+{
+    if (s_mounted) return;
 
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = true,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024
+    ESP_LOGI(TAG, "Mounting SD card (SPI)");
+
+    /* 1. Initialise the SPI bus */
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num     = SD_MOSI,
+        .miso_io_num     = SD_MISO,
+        .sclk_io_num     = SD_CLK,
+        .quadwp_io_num   = -1,
+        .quadhd_io_num   = -1,
+        .max_transfer_sz = 4096,
     };
-
-    sdmmc_card_t* card;
-    esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
-
+    esp_err_t ret = spi_bus_initialize(SD_HOST, &bus_cfg, SDSPI_DEFAULT_DMA);
     if (ret != ESP_OK) {
-        if (ret == ESP_FAIL) {
-            ESP_LOGE(TAG, "Failed to mount filesystem. "
-                     "If you want the card to be formatted, set format_if_mount_failed = true.");
-        } else {
-            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
-                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
-        }
+        ESP_LOGE(TAG, "SPI bus init failed: %s", esp_err_to_name(ret));
         return;
     }
 
-    sd_card_mounted = true;
-    ESP_LOGI(TAG, "SD card mounted successfully");
-    ESP_LOGI(TAG, "SDMMC card info: %s", card ? "valid" : "invalid");
-    ESP_LOGI(TAG, "Size: %lluMB", card ? (card->csd.capacity / (1024 * 1024)) : 0);
+    /* 2. Describe the SD device on that bus */
+    sdspi_device_config_t slot_cfg = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_cfg.gpio_cs   = SD_CS;
+    slot_cfg.host_id   = SD_HOST;
+
+    /* 3. VFS-FAT mount config */
+    esp_vfs_fat_mount_config_t mount_cfg = {
+        .format_if_mount_failed = true,
+        .max_files              = 5,
+        .allocation_unit_size   = 16 * 1024,
+    };
+
+    /* 4. Host config (SPI mode) */
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = SD_HOST;
+
+    sdmmc_card_t *card = NULL;
+    ret = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot_cfg, &mount_cfg, &card);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SD mount failed: %s", esp_err_to_name(ret));
+        spi_bus_free(SD_HOST);
+        return;
+    }
+
+    s_mounted = true;
+    ESP_LOGI(TAG, "SD card mounted – %lluMB",
+             (unsigned long long)card->csd.capacity
+                 * card->csd.sector_size / (1024ULL * 1024ULL));
+    sdmmc_card_print_info(stdout, card);
 }
 
-void storage_init(void) {
-    ESP_LOGI(TAG, "Initializing storage system");
+/* ------------------------------------------------------------------ */
+void storage_init(void)
+{
+    ESP_LOGI(TAG, "Initialising storage");
     mount_sd_card();
 
-    if (sd_card_mounted) {
-        // Create rides directory if it doesn't exist
-        struct stat st = {0};
-        if (stat("/sdcard/rides", &st) == -1) {
-            mkdir("/sdcard/rides", 0777);
-            ESP_LOGI(TAG, "Created rides directory");
+    if (!s_mounted) {
+        ESP_LOGW(TAG, "SD card not available – data will not be saved");
+        return;
+    }
+
+    /* Ensure /sdcard/rides/ exists */
+    struct stat st = {0};
+    if (stat("/sdcard/rides", &st) != 0) {
+        if (mkdir("/sdcard/rides", 0777) != 0) {
+            ESP_LOGE(TAG, "Failed to create /sdcard/rides/");
         }
-    } else {
-        ESP_LOGW(TAG, "SD card not available");
     }
 }
 
-bool storage_is_available(void) {
-    return sd_card_mounted;
+/* ------------------------------------------------------------------ */
+bool storage_is_available(void)
+{
+    return s_mounted;
 }
 
-bool storage_create_ride_directory(const char* ride_id) {
-    if (!sd_card_mounted || !ride_id) return false;
+/* ------------------------------------------------------------------ */
+bool storage_create_ride_directory(const char *ride_id)
+{
+    if (!s_mounted || !ride_id) return false;
 
-    char path[64];
-    snprintf(path, sizeof(path), "/sdcard/rides/%s", ride_id);
+    snprintf(s_ride_path, sizeof(s_ride_path), "/sdcard/rides/%s", ride_id);
 
-    if (mkdir(path, 0777) != 0) {
-        ESP_LOGE(TAG, "Failed to create ride directory: %s", path);
+    if (mkdir(s_ride_path, 0777) != 0) {
+        ESP_LOGE(TAG, "mkdir failed: %s", s_ride_path);
+        return false;
+    }
+    ESP_LOGI(TAG, "Ride directory: %s", s_ride_path);
+
+    /* Open telemetry line-protocol file */
+    char tp_path[96];
+    snprintf(tp_path, sizeof(tp_path), "%s/telemetry.lp", s_ride_path);
+    s_telemetry_file = fopen(tp_path, "w");
+    if (!s_telemetry_file) {
+        ESP_LOGE(TAG, "Cannot open %s", tp_path);
         return false;
     }
 
-    snprintf(current_ride_path, sizeof(current_ride_path), "/sdcard/rides/%s", ride_id);
-    ESP_LOGI(TAG, "Created ride directory: %s", current_ride_path);
-
-    // Open telemetry file
-    char telemetry_path[64];
-    snprintf(telemetry_path, sizeof(telemetry_path), "%s/telemetry.lp", current_ride_path);
-    current_telemetry_file = fopen(telemetry_path, "w");
-
-    if (!current_telemetry_file) {
-        ESP_LOGE(TAG, "Failed to open telemetry file");
-        return false;
-    }
-
-    // Write line protocol header
-    fprintf(current_telemetry_file, "# Velocomputer Ride Data - InfluxDB Line Protocol\n");
-    fflush(current_telemetry_file);
-
+    fprintf(s_telemetry_file,
+            "# Velocomputer – InfluxDB Line Protocol\n"
+            "# ride_id: %s\n", ride_id);
+    fflush(s_telemetry_file);
     return true;
 }
 
-bool storage_write_telemetry(bike_telemetry_t* data) {
-    if (!sd_card_mounted || !data || !current_telemetry_file) {
+/* ------------------------------------------------------------------ */
+bool storage_write_telemetry(bike_telemetry_t *data)
+{
+    if (!s_mounted || !data || !s_telemetry_file) return false;
+
+    char line[320];
+    int n = telemetry_to_line_protocol(data, line, sizeof(line));
+    if (n <= 0) {
+        ESP_LOGE(TAG, "Line-protocol serialisation failed");
         return false;
     }
 
-    char line_protocol[256];
-    int len = telemetry_to_line_protocol(data, line_protocol, sizeof(line_protocol));
-
-    if (len <= 0) {
-        ESP_LOGE(TAG, "Failed to convert telemetry to line protocol");
+    if (fwrite(line, 1, (size_t)n, s_telemetry_file) != (size_t)n) {
+        ESP_LOGE(TAG, "Write error");
         return false;
     }
 
-    if (fwrite(line_protocol, 1, len, current_telemetry_file) != len) {
-        ESP_LOGE(TAG, "Failed to write telemetry data");
-        return false;
-    }
-
-    fflush(current_telemetry_file);
+    fflush(s_telemetry_file);
     return true;
 }
 
-bool storage_write_metadata(const char* ride_id, const char* bicycle,
-                            const char* rider, const char* ride_type,
-                            uint64_t start_time) {
-    if (!sd_card_mounted || !ride_id) return false;
+/* ------------------------------------------------------------------ */
+bool storage_write_metadata(const char *ride_id, const char *bicycle,
+                            const char *rider,   const char *ride_type,
+                            uint64_t start_time_ns)
+{
+    if (!s_mounted || !ride_id) return false;
 
-    char metadata_path[64];
-    snprintf(metadata_path, sizeof(metadata_path), "%s/metadata.json", current_ride_path);
+    char path[96];
+    snprintf(path, sizeof(path), "%s/metadata.json", s_ride_path);
 
     cJSON *root = cJSON_CreateObject();
     if (!root) return false;
 
-    cJSON_AddStringToObject(root, "ride_id", ride_id);
-    cJSON_AddStringToObject(root, "bicycle", bicycle ? bicycle : "unknown");
-    cJSON_AddStringToObject(root, "rider", rider ? rider : "unknown");
-    cJSON_AddStringToObject(root, "ride_type", ride_type ? ride_type : "unknown");
+    cJSON_AddStringToObject(root, "ride_id",    ride_id);
+    cJSON_AddStringToObject(root, "bicycle",    bicycle   ? bicycle   : "unknown");
+    cJSON_AddStringToObject(root, "rider",      rider     ? rider     : "unknown");
+    cJSON_AddStringToObject(root, "ride_type",  ride_type ? ride_type : "unknown");
 
-    // Convert timestamp to ISO 8601
-    time_t sec = start_time / 1000000000;
-    struct tm *timeinfo = localtime(&sec);
-    char time_str[64];
-    strftime(time_str, sizeof(time_str), "%Y-%m-%dT%H:%M:%SZ", timeinfo);
-    cJSON_AddStringToObject(root, "start_time", time_str);
+    time_t sec = (time_t)(start_time_ns / 1000000000ULL);
+    struct tm *ti = gmtime(&sec);
+    char ts[32];
+    strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", ti);
+    cJSON_AddStringToObject(root, "start_time", ts);
 
-    char *json_str = cJSON_Print(root);
+    char *json = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
+    if (!json) return false;
 
-    if (!json_str) return false;
-
-    FILE *f = fopen(metadata_path, "w");
-    if (!f) {
-        free(json_str);
-        return false;
+    FILE *f = fopen(path, "w");
+    bool ok = false;
+    if (f) {
+        ok = (fwrite(json, 1, strlen(json), f) == strlen(json));
+        fclose(f);
     }
-
-    bool result = (fwrite(json_str, 1, strlen(json_str), f) == strlen(json_str));
-    fclose(f);
-    free(json_str);
-
-    return result;
+    free(json);
+    return ok;
 }
 
-bool storage_finalize_ride(const char* ride_id, uint64_t end_time,
-                          float distance_km, float max_speed, float avg_speed) {
-    if (!sd_card_mounted || !ride_id || !current_telemetry_file) {
-        return false;
+/* ------------------------------------------------------------------ */
+bool storage_finalize_ride(const char *ride_id, uint64_t end_time_ns,
+                           float distance_km, float max_speed, float avg_speed)
+{
+    if (!s_mounted || !ride_id) return false;
+
+    if (s_telemetry_file) {
+        fclose(s_telemetry_file);
+        s_telemetry_file = NULL;
     }
 
-    // Close telemetry file
-    fclose(current_telemetry_file);
-    current_telemetry_file = NULL;
+    /* Read existing metadata.json, add summary, write back */
+    char path[96];
+    snprintf(path, sizeof(path), "%s/metadata.json", s_ride_path);
 
-    // Update metadata with ride summary
-    char metadata_path[64];
-    snprintf(metadata_path, sizeof(metadata_path), "%s/metadata.json", current_ride_path);
-
-    FILE *f = fopen(metadata_path, "r+");
+    FILE *f = fopen(path, "r");
     if (!f) return false;
 
     fseek(f, 0, SEEK_END);
-    long size = ftell(f);
+    long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    char *buffer = malloc(size + 1);
-    if (!buffer) {
-        fclose(f);
-        return false;
-    }
+    char *buf = malloc((size_t)sz + 1);
+    if (!buf) { fclose(f); return false; }
 
-    size_t read = fread(buffer, 1, size, f);
-    buffer[read] = '\0';
-
-    cJSON *root = cJSON_Parse(buffer);
-    free(buffer);
-
-    if (!root) {
-        fclose(f);
-        return false;
-    }
-
-    // Convert end time to ISO 8601
-    time_t sec = end_time / 1000000000;
-    struct tm *timeinfo = localtime(&sec);
-    char time_str[64];
-    strftime(time_str, sizeof(time_str), "%Y-%m-%dT%H:%M:%SZ", timeinfo);
-    cJSON_AddStringToObject(root, "end_time", time_str);
-
-    cJSON_AddNumberToObject(root, "distance_km", distance_km);
-    cJSON_AddNumberToObject(root, "max_speed", max_speed);
-    cJSON_AddNumberToObject(root, "avg_speed", avg_speed);
-
-    char *json_str = cJSON_Print(root);
-    cJSON_Delete(root);
-
-    if (!json_str) {
-        fclose(f);
-        return false;
-    }
-
-    fseek(f, 0, SEEK_SET);
-    ftruncate(fileno(f), 0);
-    bool result = (fwrite(json_str, 1, strlen(json_str), f) == strlen(json_str));
+    fread(buf, 1, (size_t)sz, f);
+    buf[sz] = '\0';
     fclose(f);
-    free(json_str);
 
-    if (result) {
-        ESP_LOGI(TAG, "Ride finalized: %s", ride_id);
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) return false;
+
+    time_t sec = (time_t)(end_time_ns / 1000000000ULL);
+    struct tm *ti = gmtime(&sec);
+    char ts[32];
+    strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", ti);
+    cJSON_AddStringToObject(root, "end_time",    ts);
+    cJSON_AddNumberToObject(root, "distance_km", (double)distance_km);
+    cJSON_AddNumberToObject(root, "max_speed",   (double)max_speed);
+    cJSON_AddNumberToObject(root, "avg_speed",   (double)avg_speed);
+
+    char *json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!json) return false;
+
+    f = fopen(path, "w");
+    bool ok = false;
+    if (f) {
+        ok = (fwrite(json, 1, strlen(json), f) == strlen(json));
+        fclose(f);
     }
+    free(json);
 
-    return result;
+    if (ok) ESP_LOGI(TAG, "Ride finalised: %s (%.2f km)", ride_id, (double)distance_km);
+    return ok;
 }
 
-bool storage_generate_gpx(const char* ride_id) {
-    // This would read the telemetry.lp file and convert to GPX
-    // Implementation would parse line protocol and generate GPX XML
-    ESP_LOGI(TAG, "GPX generation for ride %s not yet implemented", ride_id);
+/* ------------------------------------------------------------------ */
+bool storage_generate_gpx(const char *ride_id)
+{
+    /*
+     * TODO: open telemetry.lp, parse line-protocol records, and call
+     * gpx_start_file / gpx_add_point / gpx_finalize_file.
+     */
+    ESP_LOGI(TAG, "GPX generation for %s not yet implemented", ride_id);
     return false;
 }
 
-int storage_get_ride_count(void) {
-    if (!sd_card_mounted) return 0;
+/* ------------------------------------------------------------------ */
+int storage_get_ride_count(void)
+{
+    if (!s_mounted) return 0;
 
     DIR *dir = opendir("/sdcard/rides");
     if (!dir) return 0;
 
     int count = 0;
-    struct dirent *entry;
-
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+    struct dirent *e;
+    while ((e = readdir(dir)) != NULL) {
+        if (e->d_type == DT_DIR
+            && e->d_name[0] != '.')   /* skip . and .. */
+        {
             count++;
         }
     }
-
     closedir(dir);
     return count;
 }
 
-bool storage_get_ride_id(int index, char* ride_id, size_t buffer_size) {
-    if (!sd_card_mounted || index < 0 || !ride_id || buffer_size < 1) return false;
+/* ------------------------------------------------------------------ */
+bool storage_get_ride_id(int index, char *ride_id, size_t buf_sz)
+{
+    if (!s_mounted || index < 0 || !ride_id || buf_sz < 2) return false;
 
     DIR *dir = opendir("/sdcard/rides");
     if (!dir) return false;
 
-    struct dirent *entry;
-    int current = 0;
+    struct dirent *e;
+    int cur = 0;
+    bool found = false;
 
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-            if (current == index) {
-                strncpy(ride_id, entry->d_name, buffer_size - 1);
-                ride_id[buffer_size - 1] = '\0';
-                closedir(dir);
-                return true;
+    while ((e = readdir(dir)) != NULL) {
+        if (e->d_type == DT_DIR && e->d_name[0] != '.') {
+            if (cur == index) {
+                strncpy(ride_id, e->d_name, buf_sz - 1);
+                ride_id[buf_sz - 1] = '\0';
+                found = true;
+                break;
             }
-            current++;
+            cur++;
         }
     }
-
     closedir(dir);
-    return false;
+    return found;
 }
