@@ -2,6 +2,7 @@
 #include "config.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include <inttypes.h>   /* PRIu32, PRIu64, etc. */
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
@@ -86,7 +87,7 @@ int telemetry_to_line_protocol(const bike_telemetry_t *data,
         "lon=%.6f,"
         "gps_sats=%u,"
         "battery=%u,"
-        "duration=%u",
+        "duration=%" PRIu32,
         (double)data->speed,
         data->cadence,
         data->latitude,
@@ -115,7 +116,7 @@ int telemetry_to_line_protocol(const bike_telemetry_t *data,
     /* Timestamp */
     if ((size_t)len < buf_size) {
         n = snprintf(buf + len, buf_size - (size_t)len,
-                     " %llu\n", (unsigned long long)data->timestamp);
+                     " %" PRIu64 "\n", data->timestamp);
         if (n > 0) len += n;
     }
 
