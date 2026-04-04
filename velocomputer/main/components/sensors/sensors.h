@@ -3,34 +3,32 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Sensor data structure
 typedef struct {
-    float speed;         // km/h
-    uint16_t cadence;    // RPM
-    uint64_t timestamp;  // nanoseconds
+    float    speed;       /* km/h  */
+    uint16_t cadence;     /* RPM   */
+    uint64_t timestamp;   /* ns    */
 
-    // Optional sensor data
     struct {
-        float temperature; // °C
-        float humidity;    // %
-        uint16_t heart_rate; // BPM
-        float power;       // Watts
+        float    temperature; /* °C  */
+        float    humidity;    /* %   */
+        uint16_t heart_rate;  /* BPM */
+        float    power;       /* W   */
     } optional;
 } sensor_data_t;
 
-// Initialize sensor system
+/* Initialise PCNT units for speed & cadence, plus any I²C sensors */
 void sensors_init(void);
 
-// Get current sensor data
-bool sensors_get_data(sensor_data_t* data);
+/* Copy latest readings into *data; returns false on error */
+bool sensors_get_data(sensor_data_t *data);
 
-// Set wheel circumference for speed calculation (in meters)
-void sensors_set_wheel_circumference(float circumference);
+/* Wheel circumference in metres (e.g. 2.105 for 700×23c) */
+void sensors_set_wheel_circumference(float circumference_m);
 
-// Set cadence sensor type (magnet count)
-void sensors_set_cadence_magnets(uint8_t magnets);
+/* Number of magnets on the crank (typically 1) */
+void sensors_set_cadence_magnets(uint8_t count);
 
-// Enable/disable optional sensors
+/* Optional sensor enable/disable */
 void sensors_enable_temperature(bool enable);
 void sensors_enable_humidity(bool enable);
 void sensors_enable_heart_rate(bool enable);
