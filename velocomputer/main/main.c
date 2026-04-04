@@ -135,9 +135,9 @@ static void ride_task(void *arg)
         /* Log a summary every 30 s */
         if (seconds % 30 == 0) {
             float avg = (seconds > 0) ? speed_sum / (float)seconds : 0.0f;
-            ESP_LOGI(TAG, "[%u s] speed=%.1f km/h dist=%.2f km avg=%.1f km/h gps=%s",
-                     seconds, (double)sens.speed, (double)distance_km,
-                     (double)avg, gps.valid ? "OK" : "searching");
+            //ESP_LOGI(TAG, "[%u s] speed=%.1f km/h dist=%.2f km avg=%.1f km/h gps=%s",
+            //         seconds, (double)sens.speed, (double)distance_km,
+            //         (double)avg, gps.valid ? "OK" : "searching");
         }
     }
 
