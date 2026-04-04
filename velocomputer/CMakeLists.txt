@@ -6,6 +6,7 @@ project(velocomputer)
 
 # Register component directories
 set(EXTRA_COMPONENT_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}/main
     ${CMAKE_CURRENT_SOURCE_DIR}/main/components/core
     ${CMAKE_CURRENT_SOURCE_DIR}/main/components/gps
     ${CMAKE_CURRENT_SOURCE_DIR}/main/components/sensors

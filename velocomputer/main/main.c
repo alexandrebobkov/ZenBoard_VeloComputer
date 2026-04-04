@@ -6,12 +6,12 @@
 #include "esp_system.h"
 
 // Component headers
-#include "core/telemetry.h"
-#include "core/config.h"
-#include "gps/gps.h"
-#include "sensors/sensors.h"
-#include "storage/storage.h"
-#include "network/network.h"
+#include "components/core/telemetry.h"
+#include "components/core/config.h"
+#include "components/gps/gps.h"
+#include "components/sensors/sensors.h"
+#include "components/storage/storage.h"
+#include "components/network/network.h"
 
 static const char *TAG = "velocomputer";
 
