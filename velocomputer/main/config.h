@@ -5,7 +5,6 @@
 #define DEVICE_ID_LENGTH  32
 #define DEFAULT_BIKE_LENGTH   32
 #define DEFAULT_RIDER_LENGTH  32
-#define PCNT_GPIO_NOT_USED 9
 
 typedef struct {
     char device_id[DEVICE_ID_LENGTH];
