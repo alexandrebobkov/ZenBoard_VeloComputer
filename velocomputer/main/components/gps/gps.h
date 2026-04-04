@@ -3,26 +3,26 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// GPS data structure
 typedef struct {
-    double latitude;
-    double longitude;
-    float altitude;
-    float speed;      // km/h
-    float heading;    // degrees
-    uint8_t satellites;
-    bool valid;
-    uint64_t timestamp; // nanoseconds
+    double   latitude;    /* decimal degrees */
+    double   longitude;
+    float    altitude;    /* metres above MSL */
+    float    speed;       /* km/h */
+    float    heading;     /* degrees true */
+    uint8_t  satellites;
+    bool     valid;
+    uint64_t timestamp;   /* nanoseconds since epoch */
 } gps_data_t;
 
-// Initialize GPS module
+/* Initialise UART and GPS module */
 void gps_init(void);
 
-// Get current GPS data (non-blocking)
-bool gps_get_data(gps_data_t* data);
+/* Non-blocking: copy current fix into *data.
+   Returns true when fix is valid. */
+bool gps_get_data(gps_data_t *data);
 
-// Start GPS acquisition
+/* Start acquisition (blocks until first fix or timeout) */
 void gps_start(void);
 
-// Stop GPS to save power
+/* Put GPS module to sleep */
 void gps_stop(void);
