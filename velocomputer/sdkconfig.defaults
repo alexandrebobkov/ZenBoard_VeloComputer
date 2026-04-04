@@ -1,0 +1,23 @@
+# Default SDK configuration for Velocomputer
+# This file can be used to set default configuration values
+
+# WiFi Configuration
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+CONFIG_ESP_WIFI_STATION_SUPPORT=y
+
+# SPI for SD Card
+CONFIG_SPI_MASTER_ISR_IN_IRAM=y
+
+# FATFS for SD Card
+CONFIG_FATFS_CODEPAGE_437=y
+CONFIG_FATFS_LFN_NONE=y
+
+# Enable JSON parser for configuration
+CONFIG_CJSON_ENABLED=y
+
+# FreeRTOS Configuration
+CONFIG_FREERTOS_UNICORE=y
+CONFIG_FREERTOS_HZ=100
+
+# Enable logging
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
