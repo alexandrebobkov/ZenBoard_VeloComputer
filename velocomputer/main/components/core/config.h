@@ -2,9 +2,9 @@
 
 #include <stdbool.h>
 
-#define DEVICE_ID_LENGTH 32
-#define DEFAULT_BIKE_LENGTH 32
-#define DEFAULT_RIDER_LENGTH 32
+#define DEVICE_ID_LENGTH  32
+#define DEFAULT_BIKE_LENGTH   32
+#define DEFAULT_RIDER_LENGTH  32
 
 typedef struct {
     char device_id[DEVICE_ID_LENGTH];
@@ -17,14 +17,14 @@ typedef struct {
     bool enable_power;
 } system_config_t;
 
-// Initialize configuration system
+/* Initialize configuration system (NVS) */
 void config_init(void);
 
-// Load configuration from storage
-bool config_load(system_config_t* config);
+/* Load configuration from NVS; returns false and fills defaults on failure */
+bool config_load(system_config_t *config);
 
-// Save configuration to storage
-bool config_save(const system_config_t* config);
+/* Persist configuration to NVS */
+bool config_save(const system_config_t *config);
 
-// Get default configuration
-void config_get_defaults(system_config_t* config);
+/* Fill *config with factory defaults */
+void config_get_defaults(system_config_t *config);
