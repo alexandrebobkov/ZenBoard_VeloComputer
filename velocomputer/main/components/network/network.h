@@ -13,7 +13,7 @@ typedef struct {
     uint16_t influxdb_port;
     char influxdb_user[32];
     char influxdb_password[64];
-} wifi_config_t;
+} velo_wifi_config_t;
 
 // Initialize network system
 void network_init(void);
@@ -42,3 +42,7 @@ bool network_save_wifi_config(const wifi_config_t* config);
 
 // Load WiFi configuration
 bool network_load_wifi_config(wifi_config_t* config);
+
+// Update all function signatures to use velo_wifi_config_t*
+bool network_save_wifi_config(const velo_wifi_config_t* config);
+bool network_load_wifi_config(velo_wifi_config_t* config);

@@ -1,3 +1,23 @@
-idf_component_register(SRCS "main.c"
-                       INCLUDE_DIRS "."
-                       REQUIRES core gps sensors storage network gpx)
+idf_component_register(
+    SRCS
+        "main.c"
+        "config.c"
+        "telemetry.c"
+        "gps.c"
+        "sensors.c"
+        "storage.c"
+        "network.c"
+        "gpx.c"
+    INCLUDE_DIRS "."
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_http_client
+        esp_netif
+        driver
+        fatfs
+        sdmmc
+        json
+        esp_timer
+        esp_system
+)

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "core/telemetry.h"
+#include "telemetry.h"
+#include "telemetry.h"
+#include "telemetry.h"
 
 // Initialize storage system (SD card)
 void storage_init(void);

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <stdbool.h>
-#include "core/telemetry.h"
+#include "telemetry.h"
+#include "telemetry.h"
+#include "telemetry.h"
 
 // Generate GPX file from telemetry data
 bool gpx_generate_from_telemetry(const char* input_file, const char* output_file);

@@ -9,8 +9,11 @@
 
 static const char *TAG = "network";
 static bool wifi_connected = false;
-static wifi_config_t current_config = {0};
+static velo_wifi_config_t current_config = {0};
 static const char *NVS_NAMESPACE = "velo_network";
+
+err = nvs_set_str(nvs_handle, "wifi_ssid", current_config.ssid);   // not config->ssid of esp type
+err = nvs_set_str(nvs_handle, "wifi_pass", current_config.password);
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                               int32_t event_id, void* event_data) {

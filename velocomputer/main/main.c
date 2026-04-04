@@ -1,17 +1,9 @@
-#include <stdio.h>
-#include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_log.h"
-#include "esp_system.h"
-
-// Component headers
-#include "components/core/telemetry.h"
-#include "components/core/config.h"
-#include "components/gps/gps.h"
-#include "components/sensors/sensors.h"
-#include "components/storage/storage.h"
-#include "components/network/network.h"
+#include "telemetry.h"
+#include "config.h"
+#include "gps.h"
+#include "sensors.h"
+#include "storage.h"
+#include "network.h"
 
 static const char *TAG = "velocomputer";
 

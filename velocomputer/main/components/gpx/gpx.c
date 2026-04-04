@@ -22,23 +22,14 @@ bool gpx_start_file(const char* filename, const char* ride_id,
     }
 
     // Write GPX header
-    fprintf(gpx_file, "<?xml version="1.0" encoding="UTF-8"?>\n");
-    fprintf(gpx_file, "<gpx version="1.1" creator="Velocomputer"\n");
-    fprintf(gpx_file, "    xmlns="http://www.topografix.com/GPX/1/1"\n");
-    fprintf(gpx_file, "    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"\n");
-    fprintf(gpx_file, "    xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">\n");
-    fprintf(gpx_file, "  <metadata>\n");
-    fprintf(gpx_file, "    <name>%s</name>\n", ride_id ? ride_id : "Unknown Ride");
-    if (bicycle) {
-        fprintf(gpx_file, "    <desc>Bicycle: %s</desc>\n", bicycle);
-    }
-    if (rider) {
-        fprintf(gpx_file, "    <desc>Rider: %s</desc>\n", rider);
-    }
-    fprintf(gpx_file, "  </metadata>\n");
-    fprintf(gpx_file, "  <trk>\n");
-    fprintf(gpx_file, "    <name>%s</name>\n", ride_id ? ride_id : "Unknown Ride");
-    fprintf(gpx_file, "    <trkseg>\n");
+    fprintf(gpx_file, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    fprintf(gpx_file, "<gpx version=\"1.1\" creator=\"Velocomputer\"\n");
+    fprintf(gpx_file, "    xmlns=\"http://www.topografix.com/GPX/1/1\"\n");
+    fprintf(gpx_file, "    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
+    fprintf(gpx_file, "    xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1 "
+                      "http://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
+    fprintf(gpx_file, "      <trkpt lat=\"%.6f\" lon=\"%.6f\">\n",
+            data->latitude, data->longitude);
 
     gpx_active = true;
     ESP_LOGI(TAG, "Started GPX file: %s", filename);
