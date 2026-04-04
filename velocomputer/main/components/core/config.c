@@ -3,6 +3,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "config";
 static const char *NVS_NAMESPACE = "velo_config";

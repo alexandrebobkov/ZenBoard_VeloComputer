@@ -64,14 +64,22 @@ void network_init(void) {
 bool network_connect_wifi(const char* ssid, const char* password) {
     if (!ssid) return false;
 
-    wifi_config_t wifi_config = {0};
-    strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
+    // Store in current config for later use
+    memset(&current_config, 0, sizeof(current_config));
+    strncpy(current_config.ssid, ssid, sizeof(current_config.ssid) - 1);
     if (password) {
-        strncpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
+        strncpy(current_config.password, password, sizeof(current_config.password) - 1);
+    }
+
+    // Set up ESP-IDF wifi config
+    wifi_config_t esp_wifi_config = {0};
+    strncpy((char*)esp_wifi_config.sta.ssid, ssid, sizeof(esp_wifi_config.sta.ssid) - 1);
+    if (password) {
+        strncpy((char*)esp_wifi_config.sta.password, password, sizeof(esp_wifi_config.sta.password) - 1);
     }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &esp_wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "Connecting to WiFi: %s", ssid);
@@ -232,8 +240,8 @@ bool network_load_wifi_config(wifi_config_t* config) {
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to open NVS namespace, using defaults: %s", esp_err_to_name(err));
         // Set defaults
-        strncpy((char*)config->ssid, "", sizeof(config->ssid));
-        strncpy((char*)config->password, "", sizeof(config->password));
+        strncpy(config->ssid, "", sizeof(config->ssid));
+        strncpy(config->password, "", sizeof(config->password));
         strncpy(config->influxdb_url, "localhost", sizeof(config->influxdb_url));
         config->influxdb_port = 8086;
         strncpy(config->influxdb_db, "bike_data", sizeof(config->influxdb_db));
@@ -243,13 +251,13 @@ bool network_load_wifi_config(wifi_config_t* config) {
     }
 
     size_t size = sizeof(config->ssid);
-    err = nvs_get_str(nvs_handle, "wifi_ssid", (char*)config->ssid, &size);
+    err = nvs_get_str(nvs_handle, "wifi_ssid", config->ssid, &size);
     if (err != ESP_OK) {
         config->ssid[0] = '\0';
     }
 
     size = sizeof(config->password);
-    err = nvs_get_str(nvs_handle, "wifi_pass", (char*)config->password, &size);
+    err = nvs_get_str(nvs_handle, "wifi_pass", config->password, &size);
     if (err != ESP_OK) {
         config->password[0] = '\0';
     }

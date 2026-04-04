@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <stdio.h>
 
 static const char *TAG = "telemetry";
 static bike_telemetry_t current_metadata;

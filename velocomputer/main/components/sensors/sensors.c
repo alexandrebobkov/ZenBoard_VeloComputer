@@ -3,7 +3,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-#include "driver/pcnt.h"
+#include "esp_driver_pcnt.h"
+#include <sys/time.h>
+#include <string.h>
 
 static const char *TAG = "sensors";
 
@@ -18,22 +20,15 @@ static bool power_enabled = false;
 // Simulated sensor data
 static sensor_data_t current_data = {0};
 
-// Pulse counter for speed sensor
-static pcnt_unit_t speed_unit = PCNT_UNIT_0;
-static int16_t speed_pulse_count = 0;
+// Pulse counter handles for speed and cadence
+static pcnt_unit_handle_t speed_unit = NULL;
+static pcnt_unit_handle_t cadence_unit = NULL;
 static uint64_t last_speed_time = 0;
-
-// Pulse counter for cadence sensor
-static pcnt_unit_t cadence_unit = PCNT_UNIT_1;
-static int16_t cadence_pulse_count = 0;
 static uint64_t last_cadence_time = 0;
 
-static void IRAM_ATTR speed_isr_handler(void* arg) {
+static bool IRAM_ATTR speed_isr_handler(pcnt_unit_handle_t unit, const pcnt_watch_event_t *event, void *user_data) {
     // Handle speed sensor interrupt
-    uint32_t status;
-    pcnt_get_event_status(speed_unit, &status);
-
-    if (status & PCNT_EVT_THRES_1) {
+    if (event->watch_point_id == 0) {
         // Threshold event - we have a complete revolution
         struct timeval tv;
         gettimeofday(&tv, NULL);
@@ -51,15 +46,12 @@ static void IRAM_ATTR speed_isr_handler(void* arg) {
         current_data.timestamp = now;
     }
 
-    pcnt_clear_event_status(speed_unit, status);
+    return false; // Don't wake higher priority task
 }
 
-static void IRAM_ATTR cadence_isr_handler(void* arg) {
+static bool IRAM_ATTR cadence_isr_handler(pcnt_unit_handle_t unit, const pcnt_watch_event_t *event, void *user_data) {
     // Handle cadence sensor interrupt
-    uint32_t status;
-    pcnt_get_event_status(cadence_unit, &status);
-
-    if (status & PCNT_EVT_THRES_1) {
+    if (event->watch_point_id == 0) {
         // Threshold event - we have cadence_magnets pulses
         struct timeval tv;
         gettimeofday(&tv, NULL);
@@ -84,47 +76,69 @@ static void IRAM_ATTR cadence_isr_handler(void* arg) {
         current_data.timestamp = now;
     }
 
-    pcnt_clear_event_status(cadence_unit, status);
+    return false; // Don't wake higher priority task
 }
 
 void sensors_init(void) {
     ESP_LOGI(TAG, "Initializing sensor system");
 
-    // Initialize pulse counters for speed and cadence
-    pcnt_config_t pcnt_config = {
-        .pulse_gpio_num = GPIO_NUM_4, // Speed sensor GPIO
-        .ctrl_gpio_num = PCNT_PIN_NOT_USED,
-        .lctrl_mode = PCNT_MODE_REVERSE,
-        .hctrl_mode = PCNT_MODE_KEEP,
-        .pos_mode = PCNT_COUNT_INC,
-        .neg_mode = PCNT_COUNT_DIS,
-        .counter_h_lim = 1000,
-        .counter_l_lim = -1000,
-        .unit = speed_unit,
-        .channel = PCNT_CHANNEL_0,
+    // Create speed unit
+    pcnt_unit_config_t speed_unit_config = {
+        .low_lim = -1000,
+        .high_lim = 1000,
+        .accum_count_thres = 1,
     };
+    pcnt_new_unit(&speed_unit_config, &speed_unit);
 
-    pcnt_unit_config(&pcnt_config);
-    pcnt_set_event_value(speed_unit, PCNT_EVT_THRES_1, 1); // Trigger on each pulse
-    pcnt_event_enable(speed_unit, PCNT_EVT_THRES_1);
-    pcnt_isr_register(speed_isr_handler, NULL, 0, NULL);
-    pcnt_intr_enable(speed_unit);
-    pcnt_counter_clear(speed_unit);
-    pcnt_counter_pause(speed_unit);
-    pcnt_counter_resume(speed_unit);
+    // Create speed channel
+    pcnt_chan_config_t speed_chan_config = {
+        .edge_gpio_num = GPIO_NUM_4,  // Speed sensor GPIO
+        .level_gpio_num = PCNT_GPIO_NOT_USED,
+    };
+    pcnt_chan_handle_t speed_chan = NULL;
+    pcnt_new_channel(speed_unit, &speed_chan_config, &speed_chan);
 
-    // Cadence sensor setup
-    pcnt_config.pulse_gpio_num = GPIO_NUM_5; // Cadence sensor GPIO
-    pcnt_config.unit = cadence_unit;
-    pcnt_config.channel = PCNT_CHANNEL_0;
-    pcnt_unit_config(&pcnt_config);
-    pcnt_set_event_value(cadence_unit, PCNT_EVT_THRES_1, cadence_magnets);
-    pcnt_event_enable(cadence_unit, PCNT_EVT_THRES_1);
-    pcnt_isr_register(cadence_isr_handler, NULL, 0, NULL);
-    pcnt_intr_enable(cadence_unit);
-    pcnt_counter_clear(cadence_unit);
-    pcnt_counter_pause(cadence_unit);
-    pcnt_counter_resume(cadence_unit);
+    // Set speed channel events
+    pcnt_chan_set_edge_action(speed_chan, PCNT_CHANNEL_EDGE_ACTION_INC, PCNT_CHANNEL_EDGE_ACTION_DIS);
+    pcnt_chan_set_level_action(speed_chan, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_KEEP);
+
+    // Add watch point for speed
+    pcnt_unit_add_watch_point(speed_unit, 1, 0);
+
+    // Register speed ISR
+    pcnt_unit_register_event_callback(speed_unit, speed_isr_handler, NULL);
+
+    // Create cadence unit
+    pcnt_unit_config_t cadence_unit_config = {
+        .low_lim = -1000,
+        .high_lim = 1000,
+        .accum_count_thres = 1,
+    };
+    pcnt_new_unit(&cadence_unit_config, &cadence_unit);
+
+    // Create cadence channel
+    pcnt_chan_config_t cadence_chan_config = {
+        .edge_gpio_num = GPIO_NUM_5,  // Cadence sensor GPIO
+        .level_gpio_num = PCNT_GPIO_NOT_USED,
+    };
+    pcnt_chan_handle_t cadence_chan = NULL;
+    pcnt_new_channel(cadence_unit, &cadence_chan_config, &cadence_chan);
+
+    // Set cadence channel events
+    pcnt_chan_set_edge_action(cadence_chan, PCNT_CHANNEL_EDGE_ACTION_INC, PCNT_CHANNEL_EDGE_ACTION_DIS);
+    pcnt_chan_set_level_action(cadence_chan, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_KEEP);
+
+    // Add watch point for cadence
+    pcnt_unit_add_watch_point(cadence_unit, 1, 0);
+
+    // Register cadence ISR
+    pcnt_unit_register_event_callback(cadence_unit, cadence_isr_handler, NULL);
+
+    // Enable both units
+    pcnt_unit_enable(speed_unit);
+    pcnt_unit_start(speed_unit);
+    pcnt_unit_enable(cadence_unit);
+    pcnt_unit_start(cadence_unit);
 
     ESP_LOGI(TAG, "Speed and cadence sensors initialized");
     ESP_LOGI(TAG, "Wheel circumference: %.3fm, Cadence magnets: %u",

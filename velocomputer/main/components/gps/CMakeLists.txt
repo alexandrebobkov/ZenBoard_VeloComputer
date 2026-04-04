@@ -1,2 +1,3 @@
 idf_component_register(SRCS "gps.c"
-                       INCLUDE_DIRS ".")
+                       INCLUDE_DIRS "."
+                       REQUIRES driver)
