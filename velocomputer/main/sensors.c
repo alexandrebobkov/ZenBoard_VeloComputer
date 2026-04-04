@@ -97,8 +97,8 @@ static pcnt_unit_handle_t create_pcnt_unit(gpio_num_t gpio,
 {
     /* Unit config: count rising edges, limit ±10000 */
     pcnt_unit_config_t unit_cfg = {
-        .low_lim  = -10000,
-        .high_lim =  10000,
+        .low_limit  = -10000,
+        .high_limit =  10000,
     };
     pcnt_unit_handle_t unit = NULL;
     ESP_ERROR_CHECK(pcnt_new_unit(&unit_cfg, &unit));
