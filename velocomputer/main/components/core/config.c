@@ -1,6 +1,6 @@
 #include "config.h"
 #include "esp_log.h"
-#include "esp_mac.h"
+#include "esp_system.h"   /* esp_read_mac() */
 #include "nvs_flash.h"
 #include "nvs.h"
 #include <string.h>
