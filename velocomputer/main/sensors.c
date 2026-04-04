@@ -49,8 +49,7 @@ static void IRAM_ATTR speed_isr_handler(void *arg)
     (void)arg;
 
     uint64_t now = now_ns();
-
-    taskENTER_CRITICAL_FROM_ISR(&s_spinlock);
+    UBaseType_t saved_irq_status = portSET_INTERRUPT_MASK_FROM_ISR();
 
     if (s_last_speed_ns > 0) {
         uint64_t dt_ns = now - s_last_speed_ns;
@@ -65,7 +64,7 @@ static void IRAM_ATTR speed_isr_handler(void *arg)
     s_current.timestamp = now;
     s_speed_initialized = true;
 
-    taskEXIT_CRITICAL_FROM_ISR(&s_spinlock);
+    portCLEAR_INTERRUPT_MASK_FROM_ISR(saved_irq_status);
 }
 
 /* ------------------------------------------------------------------ */
@@ -76,8 +75,7 @@ static void IRAM_ATTR cadence_isr_handler(void *arg)
     (void)arg;
 
     uint64_t now = now_ns();
-
-    taskENTER_CRITICAL_FROM_ISR(&s_spinlock);
+    UBaseType_t saved_irq_status = portSET_INTERRUPT_MASK_FROM_ISR();
 
     if (s_last_cadence_ns > 0) {
         uint64_t dt_ns = now - s_last_cadence_ns;
@@ -91,7 +89,7 @@ static void IRAM_ATTR cadence_isr_handler(void *arg)
     s_current.timestamp = now;
     s_cadence_initialized = true;
 
-    taskEXIT_CRITICAL_FROM_ISR(&s_spinlock);
+    portCLEAR_INTERRUPT_MASK_FROM_ISR(saved_irq_status);
 }
 
 /* ------------------------------------------------------------------ */
@@ -138,7 +136,7 @@ bool sensors_get_data(sensor_data_t *data)
     /* Speed goes to zero after 3 s without a pulse */
     uint64_t now = now_ns();
 
-    taskENTER_CRITICAL(&s_spinlock);
+    taskENTER_CRITICAL(NULL);
 
     if (s_speed_initialized && s_last_speed_ns > 0 &&
         (now - s_last_speed_ns) > 3000000000ULL) {
@@ -153,7 +151,7 @@ bool sensors_get_data(sensor_data_t *data)
 
     memcpy(data, &s_current, sizeof(sensor_data_t));
 
-    taskEXIT_CRITICAL(&s_spinlock);
+    taskEXIT_CRITICAL(NULL);
 
     /* ---- Simulated optional sensors (replace with real I²C reads) ---- */
     if (s_temp_en)  data->optional.temperature = 22.5f;
