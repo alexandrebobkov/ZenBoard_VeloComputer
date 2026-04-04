@@ -5,91 +5,127 @@
 #include <time.h>
 
 static const char *TAG = "gpx";
-static FILE* gpx_file = NULL;
-static bool gpx_active = false;
 
-bool gpx_start_file(const char* filename, const char* ride_id,
-                   const char* bicycle, const char* rider) {
-    if (gpx_active) {
-        ESP_LOGW(TAG, "GPX file already open");
+static FILE *s_file   = NULL;
+static bool  s_active = false;
+
+/* ------------------------------------------------------------------ */
+bool gpx_start_file(const char *filename, const char *ride_id,
+                    const char *bicycle,  const char *rider)
+{
+    if (s_active) {
+        ESP_LOGW(TAG, "A GPX file is already open – close it first");
+        return false;
+    }
+    if (!filename) return false;
+
+    s_file = fopen(filename, "w");
+    if (!s_file) {
+        ESP_LOGE(TAG, "Cannot open %s for writing", filename);
         return false;
     }
 
-    gpx_file = fopen(filename, "w");
-    if (!gpx_file) {
-        ESP_LOGE(TAG, "Failed to open GPX file: %s", filename);
-        return false;
-    }
+    /* XML declaration */
+    fprintf(s_file, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
 
-    // Write GPX header
-    fprintf(gpx_file, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    fprintf(gpx_file, "<gpx version=\"1.1\" creator=\"Velocomputer\"\n");
-    fprintf(gpx_file, "    xmlns=\"http://www.topografix.com/GPX/1/1\"\n");
-    fprintf(gpx_file, "    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
-    fprintf(gpx_file, "    xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1 "
-                      "http://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
-    fprintf(gpx_file, "      <trkpt lat=\"%.6f\" lon=\"%.6f\">\n",
-            data->latitude, data->longitude);
+    /* Root element */
+    fprintf(s_file,
+        "<gpx version=\"1.1\" creator=\"Velocomputer\"\n"
+        "  xmlns=\"http://www.topografix.com/GPX/1/1\"\n"
+        "  xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
+        "  xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1"
+        " http://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
 
-    gpx_active = true;
-    ESP_LOGI(TAG, "Started GPX file: %s", filename);
+    /* Metadata block */
+    fprintf(s_file, "  <metadata>\n");
+    fprintf(s_file, "    <name>%s</name>\n",
+            ride_id ? ride_id : "Unknown Ride");
+    if (bicycle && bicycle[0])
+        fprintf(s_file, "    <desc>Bicycle: %s</desc>\n", bicycle);
+    if (rider && rider[0])
+        fprintf(s_file, "    <author><name>%s</name></author>\n", rider);
+    fprintf(s_file, "  </metadata>\n");
+
+    /* Track */
+    fprintf(s_file, "  <trk>\n");
+    fprintf(s_file, "    <name>%s</name>\n",
+            ride_id ? ride_id : "Unknown Ride");
+    fprintf(s_file, "    <trkseg>\n");
+
+    fflush(s_file);
+    s_active = true;
+    ESP_LOGI(TAG, "GPX file opened: %s", filename);
     return true;
 }
 
-void gpx_add_point(bike_telemetry_t* data) {
-    if (!gpx_active || !gpx_file || !data) {
-        return;
-    }
+/* ------------------------------------------------------------------ */
+void gpx_add_point(const bike_telemetry_t *data)
+{
+    if (!s_active || !s_file || !data) return;
 
-    // Convert timestamp to ISO 8601
-    time_t sec = data->timestamp / 1000000000;
-    struct tm *timeinfo = gmtime(&sec);
-    char time_str[64];
-    strftime(time_str, sizeof(time_str), "%Y-%m-%dT%H:%M:%SZ", timeinfo);
+    /* ISO-8601 timestamp from nanosecond epoch */
+    time_t sec = (time_t)(data->timestamp / 1000000000ULL);
+    struct tm *ti = gmtime(&sec);
+    char ts[32];
+    strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", ti);
 
-    // Write GPX track point
-    fprintf(gpx_file, "      <trkpt lat="%.6f" lon="%.6f">\n",
+    /* Track point with lat/lon attributes */
+    fprintf(s_file,
+            "      <trkpt lat=\"%.6f\" lon=\"%.6f\">\n",
             data->latitude, data->longitude);
-    fprintf(gpx_file, "        <time>%s</time>\n", time_str);
-    fprintf(gpx_file, "        <ele>%.1f</ele>\n", data->optional.altitude);
+    fprintf(s_file, "        <ele>%.1f</ele>\n",
+            (double)data->optional.altitude);
+    fprintf(s_file, "        <time>%s</time>\n", ts);
 
-    // Add extensions for additional data
-    fprintf(gpx_file, "        <extensions>\n");
-    fprintf(gpx_file, "          <speed>%.1f</speed>\n", data->speed);
-    fprintf(gpx_file, "          <cadence>%u</cadence>\n", data->cadence);
-    if (data->optional.heart_rate > 0) {
-        fprintf(gpx_file, "          <hr>%u</hr>\n", data->optional.heart_rate);
-    }
-    if (data->optional.power > 0) {
-        fprintf(gpx_file, "          <power>%.1f</power>\n", data->optional.power);
-    }
-    fprintf(gpx_file, "        </extensions>\n");
+    /* Extensions for cycling-specific data */
+    fprintf(s_file, "        <extensions>\n");
+    fprintf(s_file, "          <speed>%.2f</speed>\n",     (double)data->speed);
+    fprintf(s_file, "          <cadence>%u</cadence>\n",   data->cadence);
 
-    fprintf(gpx_file, "      </trkpt>\n");
+    if (data->optional.heart_rate > 0)
+        fprintf(s_file, "          <hr>%u</hr>\n",
+                data->optional.heart_rate);
+
+    if (data->optional.power > 0.0f)
+        fprintf(s_file, "          <power>%.1f</power>\n",
+                (double)data->optional.power);
+
+    if (data->optional.temperature != 0.0f)
+        fprintf(s_file, "          <atemp>%.1f</atemp>\n",
+                (double)data->optional.temperature);
+
+    fprintf(s_file, "        </extensions>\n");
+    fprintf(s_file, "      </trkpt>\n");
+
+    fflush(s_file);
 }
 
-bool gpx_finalize_file(void) {
-    if (!gpx_active || !gpx_file) {
-        return false;
-    }
+/* ------------------------------------------------------------------ */
+bool gpx_finalize_file(void)
+{
+    if (!s_active || !s_file) return false;
 
-    // Close track segment and file
-    fprintf(gpx_file, "    </trkseg>\n");
-    fprintf(gpx_file, "  </trk>\n");
-    fprintf(gpx_file, "</gpx>\n");
+    fprintf(s_file, "    </trkseg>\n");
+    fprintf(s_file, "  </trk>\n");
+    fprintf(s_file, "</gpx>\n");
 
-    fclose(gpx_file);
-    gpx_file = NULL;
-    gpx_active = false;
+    fclose(s_file);
+    s_file   = NULL;
+    s_active = false;
 
-    ESP_LOGI(TAG, "Finalized GPX file");
+    ESP_LOGI(TAG, "GPX file finalised");
     return true;
 }
 
-bool gpx_generate_from_telemetry(const char* input_file, const char* output_file) {
-    // This would parse the line protocol file and generate GPX
-    // For now, it's a stub
-    ESP_LOGI(TAG, "GPX generation from %s to %s not yet implemented",
-             input_file, output_file);
+/* ------------------------------------------------------------------ */
+bool gpx_generate_from_telemetry(const char *input_lp_file,
+                                 const char *output_gpx_file)
+{
+    /*
+     * TODO: open input_lp_file, parse each line-protocol record,
+     * call gpx_start_file / gpx_add_point / gpx_finalize_file.
+     */
+    ESP_LOGI(TAG, "gpx_generate_from_telemetry(%s → %s) not yet implemented",
+             input_lp_file, output_gpx_file);
     return false;
 }

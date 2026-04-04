@@ -1,18 +1,18 @@
 #pragma once
 
-#include "telemetry.h"
-#include "telemetry.h"
-#include "telemetry.h"
+#include <stdbool.h>
+#include "telemetry.h"   /* flat include – no components/core/ prefix */
 
-// Generate GPX file from telemetry data
-bool gpx_generate_from_telemetry(const char* input_file, const char* output_file);
+/* Open a new GPX file and write the XML header + track start */
+bool gpx_start_file(const char *filename, const char *ride_id,
+                    const char *bicycle,  const char *rider);
 
-// Add telemetry point to GPX builder
-void gpx_add_point(bike_telemetry_t* data);
+/* Append one track point from a telemetry record */
+void gpx_add_point(const bike_telemetry_t *data);
 
-// Start new GPX file
-bool gpx_start_file(const char* filename, const char* ride_id,
-                   const char* bicycle, const char* rider);
-
-// Finalize and close GPX file
+/* Close the track segment and the file */
 bool gpx_finalize_file(void);
+
+/* (Post-ride) Parse telemetry.lp and emit a GPX file – not yet implemented */
+bool gpx_generate_from_telemetry(const char *input_lp_file,
+                                 const char *output_gpx_file);
