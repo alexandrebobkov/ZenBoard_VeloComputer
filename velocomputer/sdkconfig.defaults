@@ -4,6 +4,13 @@
 # WiFi Configuration
 CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
 CONFIG_ESP_WIFI_STATION_SUPPORT=y
+CONFIG_ESP_WIFI_ESP_NOW=y
+
+# Enable HTTP client
+CONFIG_ESP_HTTP_CLIENT_ENABLED=y
+
+# Enable NVS for configuration storage
+CONFIG_NVS_FLASH=y
 
 # SPI for SD Card
 CONFIG_SPI_MASTER_ISR_IN_IRAM=y
@@ -14,6 +21,19 @@ CONFIG_FATFS_LFN_NONE=y
 
 # Enable JSON parser for configuration
 CONFIG_CJSON_ENABLED=y
+
+# Enable SPI flash support
+CONFIG_SPI_FLASH=y
+
+# Enable SDMMC host
+CONFIG_SDMMC_HOST=y
+
+# Enable FATFS for SD card
+CONFIG_FATFS_ENABLED=y
+
+# Enable Pulse Counter for sensors
+CONFIG_PCNT_SUPPORTED=y
+CONFIG_PCNT=y
 
 # FreeRTOS Configuration
 CONFIG_FREERTOS_UNICORE=y
