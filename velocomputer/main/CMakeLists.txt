@@ -14,10 +14,12 @@ idf_component_register(
         esp_wifi
         esp_http_client
         esp_netif
+        esp_event
         driver
         fatfs
         sdmmc
         json
         esp_timer
         esp_system
+        esp_mac
 )
