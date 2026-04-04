@@ -3,7 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-#include "driver/pulse_cnt.h"
+#include "esp_timer.h"
 #include <sys/time.h>
 #include <string.h>
 
@@ -24,13 +24,13 @@ static bool s_power_en = false;
 /* ---------- Shared sensor state ------------------------------------ */
 static sensor_data_t s_current = {0};
 
-/* ---------- PCNT handles ------------------------------------------ */
-static pcnt_unit_handle_t s_speed_unit   = NULL;
-static pcnt_unit_handle_t s_cadence_unit = NULL;
-
 /* Timestamps (ns) of last pulse, used to compute interval */
 static volatile uint64_t s_last_speed_ns   = 0;
 static volatile uint64_t s_last_cadence_ns = 0;
+
+/* Track if we've seen at least one pulse */
+static volatile bool s_speed_initialized   = false;
+static volatile bool s_cadence_initialized = false;
 
 /* ------------------------------------------------------------------ */
 static uint64_t now_ns(void)
@@ -44,94 +44,73 @@ static uint64_t now_ns(void)
 /* ------------------------------------------------------------------ */
 /*  Speed ISR – called every time the wheel completes one revolution  */
 /* ------------------------------------------------------------------ */
-static bool IRAM_ATTR speed_on_reach(pcnt_unit_handle_t unit,
-                                     const pcnt_watch_event_data_t *edata,
-                                     void *user_ctx)
+static void IRAM_ATTR speed_isr_handler(void *arg)
 {
-    (void)unit; (void)edata; (void)user_ctx;
+    (void)arg;
 
     uint64_t now = now_ns();
 
+    taskENTER_CRITICAL_FROM_ISR(&s_spinlock);
+
     if (s_last_speed_ns > 0) {
-        float dt_s = (float)(now - s_last_speed_ns) / 1e9f;
-        if (dt_s > 0.0f) {
-            /* speed (km/h) = circumference(m) / dt(s)  * 3.6 */
+        uint64_t dt_ns = now - s_last_speed_ns;
+        float dt_s = (float)dt_ns / 1e9f;
+        if (dt_s > 0.0f && dt_s < 10.0f) {  /* Ignore unrealistic gaps */
+            /* speed (km/h) = circumference(m) / dt(s) * 3.6 */
             s_current.speed = (s_wheel_circumference / dt_s) * 3.6f;
         }
     }
 
     s_last_speed_ns  = now;
     s_current.timestamp = now;
+    s_speed_initialized = true;
 
-    return false; /* no high-priority task wake-up needed */
+    taskEXIT_CRITICAL_FROM_ISR(&s_spinlock);
 }
 
 /* ------------------------------------------------------------------ */
 /*  Cadence ISR – called every time crank completes one revolution    */
 /* ------------------------------------------------------------------ */
-static bool IRAM_ATTR cadence_on_reach(pcnt_unit_handle_t unit,
-                                       const pcnt_watch_event_data_t *edata,
-                                       void *user_ctx)
+static void IRAM_ATTR cadence_isr_handler(void *arg)
 {
-    (void)unit; (void)edata; (void)user_ctx;
+    (void)arg;
 
     uint64_t now = now_ns();
 
+    taskENTER_CRITICAL_FROM_ISR(&s_spinlock);
+
     if (s_last_cadence_ns > 0) {
-        float dt_min = (float)(now - s_last_cadence_ns) / 60e9f;
-        if (dt_min > 0.0f) {
+        uint64_t dt_ns = now - s_last_cadence_ns;
+        float dt_min = (float)dt_ns / 60e9f;
+        if (dt_min > 0.0f && dt_min < 10.0f) {  /* Ignore unrealistic gaps */
             s_current.cadence = (uint16_t)(1.0f / dt_min);
         }
     }
 
     s_last_cadence_ns   = now;
     s_current.timestamp = now;
+    s_cadence_initialized = true;
 
-    return false;
+    taskEXIT_CRITICAL_FROM_ISR(&s_spinlock);
 }
 
 /* ------------------------------------------------------------------ */
-static pcnt_unit_handle_t create_pcnt_unit(gpio_num_t gpio,
-                                           pcnt_watch_cb_t cb,
-                                           int watch_point)
+static void setup_gpio_interrupt(gpio_num_t gpio, gpio_isr_t isr_handler,
+                                  const char *name)
 {
-    /* Unit config: count rising edges, limit ±10000 */
-    pcnt_unit_config_t unit_cfg = {
-        .low_limit  = -10000,
-        .high_limit =  10000,
+    gpio_config_t io_conf = {
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_POSEDGE,
+        .pin_bit_mask = (1ULL << gpio),
     };
-    pcnt_unit_handle_t unit = NULL;
-    ESP_ERROR_CHECK(pcnt_new_unit(&unit_cfg, &unit));
 
-    /* Channel: count rising edges on the reed-switch GPIO */
-    pcnt_chan_config_t chan_cfg = {
-        .edge_gpio_num  = gpio,
-        .level_gpio_num = PCNT_GPIO_NOT_USED,
-    };
-    pcnt_channel_handle_t chan = NULL;
-    ESP_ERROR_CHECK(pcnt_new_channel(unit, &chan_cfg, &chan));
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_IRAM));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(gpio, isr_handler, NULL));
 
-    /* Increment on rising edge, ignore falling edge */
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(
-        chan,
-        PCNT_CHANNEL_EDGE_ACTION_INCREASE,  /* rising  */
-        PCNT_CHANNEL_EDGE_ACTION_HOLD));    /* falling */
-
-    /* Watch point fires the ISR every `watch_point` pulses */
-    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(unit, watch_point));
-
-    /* Register ISR callback via the v5.x callbacks struct */
-    pcnt_event_callbacks_t cbs = {
-        .on_reach = cb,
-    };
-    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(unit, &cbs, NULL));
-
-    /* Enable and start counting */
-    ESP_ERROR_CHECK(pcnt_unit_enable(unit));
-    ESP_ERROR_CHECK(pcnt_unit_clear_count(unit));
-    ESP_ERROR_CHECK(pcnt_unit_start(unit));
-
-    return unit;
+    ESP_LOGI(TAG, "%s sensor configured on GPIO %d", name, gpio);
 }
 
 /* ------------------------------------------------------------------ */
@@ -141,12 +120,11 @@ void sensors_init(void)
              s_wheel_circumference, s_cadence_magnets);
 
     /*
-     * Speed: fire ISR on every wheel revolution (1 magnet → watch_point = 1).
-     * Cadence: fire ISR every s_cadence_magnets pulses.
+     * Speed: interrupt on every wheel revolution (1 magnet).
+     * Cadence: interrupt on every crank revolution.
      */
-    s_speed_unit   = create_pcnt_unit(SPEED_GPIO,   speed_on_reach,   1);
-    s_cadence_unit = create_pcnt_unit(CADENCE_GPIO, cadence_on_reach,
-                                      s_cadence_magnets);
+    setup_gpio_interrupt(SPEED_GPIO, speed_isr_handler, "Speed");
+    setup_gpio_interrupt(CADENCE_GPIO, cadence_isr_handler, "Cadence");
 
     ESP_LOGI(TAG, "Speed sensor on GPIO %d, cadence on GPIO %d",
              SPEED_GPIO, CADENCE_GPIO);
@@ -159,11 +137,23 @@ bool sensors_get_data(sensor_data_t *data)
 
     /* Speed goes to zero after 3 s without a pulse */
     uint64_t now = now_ns();
-    if (s_last_speed_ns > 0 && (now - s_last_speed_ns) > 3000000000ULL) {
+
+    taskENTER_CRITICAL(&s_spinlock);
+
+    if (s_speed_initialized && s_last_speed_ns > 0 &&
+        (now - s_last_speed_ns) > 3000000000ULL) {
         s_current.speed = 0.0f;
     }
 
+    /* Cadence goes to zero after 5 s without a pulse */
+    if (s_cadence_initialized && s_last_cadence_ns > 0 &&
+        (now - s_last_cadence_ns) > 5000000000ULL) {
+        s_current.cadence = 0;
+    }
+
     memcpy(data, &s_current, sizeof(sensor_data_t));
+
+    taskEXIT_CRITICAL(&s_spinlock);
 
     /* ---- Simulated optional sensors (replace with real I²C reads) ---- */
     if (s_temp_en)  data->optional.temperature = 22.5f;

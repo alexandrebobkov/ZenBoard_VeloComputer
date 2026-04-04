@@ -3,8 +3,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define PCNT_GPIO_NOT_USED 9
-
 typedef struct {
     float    speed;       /* km/h  */
     uint16_t cadence;     /* RPM   */
@@ -18,7 +16,7 @@ typedef struct {
     } optional;
 } sensor_data_t;
 
-/* Initialise PCNT units for speed & cadence, plus any I²C sensors */
+/* Initialise GPIO interrupts for speed & cadence, plus any I²C sensors */
 void sensors_init(void);
 
 /* Copy latest readings into *data; returns false on error */
