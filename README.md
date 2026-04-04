@@ -25,10 +25,10 @@ Bicycle computer powered by ESP32-C3 microcontroller to measure speed and cadenc
 |-----------|------|-------|
 | Speed sensor (reed switch) | GPIO4 | External interrupt |
 | Cadence sensor (reed switch) | GPIO5 | External interrupt |
-| SD Card CS | GPIO6 | SPI chip select |
-| SD Card CLK | GPIO7 | SPI clock |
-| SD Card MOSI | GPIO8 | SPI data out |
-| SD Card MISO | GPIO9 | SPI data in |
+| SD Card CS | GPIO6 (13) | SPI chip select |
+| SD Card CLK | GPIO7 (14) | SPI clock |
+| SD Card MOSI | GPIO8 (15) | SPI data out |
+| SD Card MISO | GPIO9 (2) | SPI data in |
 | GPS TX | GPIO10 | UART RX |
 | GPS RX | GPIO11 | UART TX |
 | Display SDA | GPIO12 | I2C data (optional) |
