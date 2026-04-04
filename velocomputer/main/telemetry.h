@@ -12,6 +12,7 @@
 #define RIDER_NAME_LENGTH  32
 #define RIDE_TYPE_LENGTH   16
 #define RIDE_ID_LENGTH     37   /* 36-char UUID + NUL */
+#define PCNT_GPIO_NOT_USED 9
 
 typedef struct {
     /* ---- InfluxDB tags (identity) ---- */
