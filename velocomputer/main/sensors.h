@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define PCNT_GPIO_NOT_USED 9
+
 typedef struct {
     float    speed;       /* km/h  */
     uint16_t cadence;     /* RPM   */
