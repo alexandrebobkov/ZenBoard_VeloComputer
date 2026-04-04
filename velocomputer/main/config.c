@@ -1,6 +1,7 @@
 #include "config.h"
 #include "esp_log.h"
-#include "esp_system.h"   /* esp_read_mac() */
+#include "esp_system.h"
+#include "esp_mac.h"      /* esp_read_mac() – not re-exported by esp_system.h in v5.x */
 #include "nvs_flash.h"
 #include "nvs.h"
 #include <string.h>
