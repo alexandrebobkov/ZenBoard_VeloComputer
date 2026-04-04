@@ -21,5 +21,4 @@ idf_component_register(
         json
         esp_timer
         esp_system
-        esp_mac
 )
