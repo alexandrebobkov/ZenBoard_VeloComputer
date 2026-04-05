@@ -21,6 +21,8 @@ void app_main(void)
     // GPS, storage, and network are skipped for now to isolate the crash.
     config_init();
     sensors_init();
+    display_init();
+    display_start_task();
 
     ESP_LOGI(TAG, "Setup complete — watching speed and cadence sensors.");
     ESP_LOGI(TAG, "Briefly short GPIO4→GND for speed, GPIO5→GND for cadence.");
