@@ -7,6 +7,7 @@
 
 #include "config.h"
 #include "sensors.h"
+#include "display.h"
 
 static const char *TAG = "velocomputer";
 
