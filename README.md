@@ -1,6 +1,6 @@
-# ZenBoard_Velocomputer
+# ZenBoard VeloComputer
 
-Bicycle computer powered by ESP32-C3 microcontroller to measure speed and cadence.
+Bicycle computer powered by ESP32-C3 microcontroller to measure distance, speed and cadence telemetry.
 
 ## Features
 
@@ -31,12 +31,10 @@ Bicycle computer powered by ESP32-C3 microcontroller to measure speed and cadenc
 | SD Card MISO | GPIO9 (2) | SPI data in |
 | GPS TX | GPIO10 | UART RX |
 | GPS RX | GPIO11 | UART TX |
-| Display SDA | GPIO12 | I2C data (optional) |
-| Display SCL | GPIO13 | I2C clock (optional) |
 
 ## Project Structure
 
-```
+```raw
 velocomputer/
 ├── main/
 │   ├── main.c        # Application entry point

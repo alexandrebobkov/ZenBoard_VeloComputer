@@ -16,6 +16,8 @@ Command used to initialize esp-idf v5.5.1 environment:
 |-----------|------|-------|
 | Speed sensor (reed switch) | GPIO4 | PCNT alternative: use GPIO interrupt |
 | Cadence sensor (reed switch) | GPIO5 | PCNT alternative: use GPIO interrupt |
+| Display SDA | GPIO7 | I2C Data GPIO |
+| Display SCL | GPIO10 | I2C Clock GPIO |
 | SD Card | (see sdmmc config) | FATFS filesystem |
 
 ### Important Hardware Limitations
@@ -35,7 +37,7 @@ Command used to initialize esp-idf v5.5.1 environment:
 - Source files contain implementations and private helpers (static functions)
 
 ## Project Structure
-```
+```raw
 velocomputer/
 ├── main/
 │   ├── main.c        # Application entry point
