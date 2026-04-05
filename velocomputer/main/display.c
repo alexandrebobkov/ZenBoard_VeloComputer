@@ -255,5 +255,5 @@ static void display_task(void *arg) {
 }
 
 void display_start_task(void) {
-    xTaskCreate(display_task, "display", 2048, NULL, 4, NULL);
+    xTaskCreate(display_task, "display", 8192, NULL, 4, NULL);
 }

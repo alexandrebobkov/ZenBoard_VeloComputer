@@ -123,7 +123,7 @@ void sensors_init(void) {
     ESP_ERROR_CHECK(gpio_isr_handler_add(SPEED_GPIO,   speed_isr,   NULL));
     ESP_ERROR_CHECK(gpio_isr_handler_add(CADENCE_GPIO, cadence_isr, NULL));
 
-    xTaskCreate(sensor_debug_task, "sensor_dbg", 2048, NULL, 5, NULL);
+    xTaskCreate(sensor_debug_task, "sensor_dbg", 4096, NULL, 5, NULL);
 
     ESP_LOGI(TAG, "Sensors ready — trigger the reed switches to test");
 }
