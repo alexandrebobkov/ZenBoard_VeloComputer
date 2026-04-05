@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "main.c"
         "config.c"
+        "display.c"
         "telemetry.c"
         "gps.c"
         "sensors.c"
