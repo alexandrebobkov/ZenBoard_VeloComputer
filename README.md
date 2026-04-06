@@ -23,14 +23,16 @@ Bicycle computer powered by ESP32-C3 microcontroller to measure distance, speed 
 
 | Component | GPIO | Notes |
 |-----------|------|-------|
-| Speed sensor (reed switch) | GPIO4 | External interrupt |
-| Cadence sensor (reed switch) | GPIO5 | External interrupt |
-| SD Card CS | GPIO6 (13) | SPI chip select |
-| SD Card CLK | GPIO7 (14) | SPI clock |
-| SD Card MOSI | GPIO8 (15) | SPI data out |
-| SD Card MISO | GPIO9 (2) | SPI data in |
-| GPS TX | GPIO10 | UART RX |
-| GPS RX | GPIO11 | UART TX |
+| Speed sensor (reed switch) | GPIO4 | PCNT alternative: uses GPIO interrupt |
+| Cadence sensor (reed switch) | GPIO5 | PCNT alternative: uses GPIO interrupt |
+| Display SDA | GPIO7 | I2C Data GPIO |
+| Display SCL | GPIO10 | I2C Clock GPIO |
+| SD Card CS | GPIO13 | SPI chip select |
+| SD Card CLK | GPI14 | SPI clock |
+| SD Card MOSI | GPIO15 | SPI data out |
+| SD Card MISO | GPIO2 | SPI data in |
+| GPS TX | GPIO10 | UART Rx |
+| GPS RX | GPIO11 | UART Tx |
 
 ## Project Structure
 

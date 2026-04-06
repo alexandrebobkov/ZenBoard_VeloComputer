@@ -14,13 +14,13 @@ Command used to initialize esp-idf v5.5.1 environment:
 ### GPIO Assignments
 | Component | GPIO | Notes |
 |-----------|------|-------|
-| Speed sensor (reed switch) | GPIO4 | PCNT alternative: use GPIO interrupt |
-| Cadence sensor (reed switch) | GPIO5 | PCNT alternative: use GPIO interrupt |
+| Speed sensor (reed switch) | GPIO4 | PCNT alternative: uses GPIO interrupt |
+| Cadence sensor (reed switch) | GPIO5 | PCNT alternative: uses GPIO interrupt |
 | Display SDA | GPIO7 | I2C Data GPIO |
 | Display SCL | GPIO10 | I2C Clock GPIO |
 | SD Card | (see sdmmc config) | FATFS filesystem |
 
-### Important Hardware Limitations
+### Important Hardware Constraints
 - **ESP32-C3 does NOT support PCNT (Pulse Counter) peripheral**
 - Use GPIO interrupts + timer for pulse counting instead
 - Do NOT add `esp_driver_pcnt` to CMakeLists.txt - it won't work!
