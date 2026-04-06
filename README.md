@@ -2,6 +2,8 @@
 
 Bicycle computer powered by ESP32-C3 microcontroller to measure distance, speed and cadence telemetry.
 
+The Bucycle Velocomputer is a compact, ESP32‑C3‑powered bicycle computer designed to capture and analyze real‑time ride telemetry. It measures distance, speed, and cadence using dedicated reed switch sensors: speed on GPIO4 and cadence on GPIO5, providing accurate mechanical pulse detection. GPS tracking enables route recording with automatic GPX file generation, while all ride data is logged to an SD card using the FATFS filesystem for easy retrieval. The system also supports transmission of telemetry over Wi‑Fi, allowing live data streaming or synchronization with external dashboards. Configuration parameters are managed through a persistent storage layer, ensuring user settings remain intact across power cycles.
+
 ## Features
 
 - **Speed measurement** via reed switch sensor on GPIO4
